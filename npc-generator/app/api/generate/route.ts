@@ -5,13 +5,7 @@ export const maxDuration = 30
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
-async function generateOneNanoBanana(prompt: string, ratio: string) {
-  const aspectMap: Record<string, string> = {
-    '16:9': 'ASPECT_16_9',
-    '9:16': 'ASPECT_9_16',
-    '1:1': 'IMAGE_ASPECT_RATIO_UNSPECIFIED',
-  }
-  const aspectRatio = aspectMap[ratio] || 'ASPECT_16_9'
+async function generateOneNanoBanana(prompt: string) {
   const apiKey = process.env.GOOGLE_API_KEY
 
   const res = await fetch(
@@ -23,7 +17,6 @@ async function generateOneNanoBanana(prompt: string, ratio: string) {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           responseModalities: ['TEXT', 'IMAGE'],
-          aspectRatio,
         },
       }),
     }
@@ -74,7 +67,7 @@ export async function POST(req: NextRequest) {
     if (model === 'gpt-image-2') {
       image = await generateOneGPTImage(fullPrompt, aspect_ratio || '16:9')
     } else {
-      image = await generateOneNanoBanana(fullPrompt, aspect_ratio || '16:9')
+      image = await generateOneNanoBanana(fullPrompt)
     }
     return NextResponse.json({ image })
   } catch (e) {
