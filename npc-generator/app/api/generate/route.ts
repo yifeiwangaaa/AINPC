@@ -23,26 +23,22 @@ async function generateOneNanoBanana(prompt: string, ratio: string) {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           responseModalities: ['TEXT', 'IMAGE'],
-          imageGenerationConfig: { aspectRatio },
+          aspectRatio,
         },
       }),
     }
   )
   const data = await res.json()
   console.log('Google API response:', JSON.stringify(data).slice(0, 500))
-  
+
   const parts = data?.candidates?.[0]?.content?.parts
-  if (!parts) {
-    console.log('No parts found, full response:', JSON.stringify(data))
-    return null
-  }
+  if (!parts) return null
   const part = parts.find(
     (p: { inlineData?: { mimeType: string; data: string } }) => p.inlineData
   )
   if (part?.inlineData?.data) {
     return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
   }
-  console.log('No inlineData found in parts:', JSON.stringify(parts).slice(0, 200))
   return null
 }
 
