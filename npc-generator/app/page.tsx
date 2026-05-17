@@ -17,8 +17,8 @@ type NPCWithImages = NPC & {
 }
 
 const MODELS = [
-  { value: 'gpt-image-2', label: 'GPT Image 2' },
   { value: 'nano-banana-2', label: 'Nano Banana 2 (Google)' },
+  { value: 'gpt-image-2', label: 'GPT Image 2' },
 ]
 
 const STYLES = [
@@ -36,7 +36,7 @@ export default function Home() {
   const [text, setText] = useState('')
   const [npcs, setNpcs] = useState<NPCWithImages[]>([])
   const [analyzing, setAnalyzing] = useState(false)
-  const [model, setModel] = useState('gpt-image-1')
+  const [model, setModel] = useState('nano-banana-2')
   const [style, setStyle] = useState('')
   const [ratio, setRatio] = useState('16:9')
   const [error, setError] = useState('')
@@ -64,18 +64,33 @@ export default function Home() {
 
   async function generateForNPC(idx: number) {
     const npc = npcs[idx]
-    setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: true, error: undefined } : n))
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: npc.image_prompt, negative_prompt: npc.negative_prompt, model, style, aspect_ratio: ratio }),
-      })
-      const data = await res.json()
-      setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, images: data.images, loading: false } : n))
-    } catch {
-      setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: false, error: '生成失败' } : n))
+    setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: true, images: [], error: undefined } : n))
+
+    for (let i = 0; i < 4; i++) {
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: npc.image_prompt,
+            negative_prompt: npc.negative_prompt,
+            model,
+            style,
+            aspect_ratio: ratio,
+          }),
+        })
+        const data = await res.json()
+        if (data.image) {
+          setNpcs(prev => prev.map((n, j) =>
+            j === idx ? { ...n, images: [...n.images, data.image] } : n
+          ))
+        }
+      } catch {
+        // continue to next image
+      }
     }
+
+    setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: false } : n))
   }
 
   async function generateAll() {
@@ -96,7 +111,6 @@ export default function Home() {
   function exportToExcel() {
     const selected = npcs.filter(n => n.selected && n.images.length)
     if (!selected.length) return
-
     const rows = selected.map(n => ({
       角色名: n.name,
       描述: n.description,
@@ -106,7 +120,6 @@ export default function Home() {
       图像3: n.images[2] || '',
       图像4: n.images[3] || '',
     }))
-
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 40 }, { wch: 60 }, { wch: 60 }, { wch: 60 }, { wch: 60 }]
     const wb = XLSX.utils.book_new()
@@ -122,7 +135,6 @@ export default function Home() {
       <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>NPC 形象生成器</h1>
       <p style={{ color: '#666', marginBottom: 24, fontSize: 14 }}>输入剧情文本，自动识别角色并生成形象图，每个角色4张</p>
 
-      {/* 设置栏 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ fontSize: 13, color: '#555' }}>生图模型</label>
@@ -144,7 +156,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 文本输入 */}
       <textarea
         value={text}
         onChange={e => setText(e.target.value)}
@@ -163,7 +174,6 @@ export default function Home() {
       </div>
       {error && <p style={{ color: '#c00', marginTop: 8, fontSize: 13 }}>{error}</p>}
 
-      {/* NPC 卡片 */}
       {npcs.length > 0 && (
         <div style={{ marginTop: 28 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -198,22 +208,27 @@ export default function Home() {
                 }}
                 onClick={() => toggleSelect(idx)}
               >
-                {/* 图像区域 */}
-                <div style={{ background: '#f5f5f5', aspectRatio: ratio === '16:9' ? '16/9' : ratio === '9:16' ? '9/16' : '1/1', position: 'relative', overflow: 'hidden' }}>
-                  {npc.loading ? (
-                    <div style={centerFlex}>
-                      <div style={spinner} />
-                      <span style={{ fontSize: 12, color: '#888', marginTop: 8 }}>生成中...</span>
-                    </div>
-                  ) : npc.images.length > 0 ? (
+                <div style={{
+                  background: '#f5f5f5',
+                  aspectRatio: ratio === '16:9' ? '16/9' : ratio === '9:16' ? '9/16' : '1/1',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  {npc.images.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100%' }}>
                       {npc.images.map((img, i) => (
                         <img key={i} src={img} alt={`${npc.name} ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ))}
+                      {npc.loading && Array.from({ length: 4 - npc.images.length }).map((_, i) => (
+                        <div key={i} style={{ ...centerFlex, background: '#f5f5f5' }}>
+                          <div style={spinner} />
+                        </div>
+                      ))}
                     </div>
-                  ) : npc.error ? (
+                  ) : npc.loading ? (
                     <div style={centerFlex}>
-                      <span style={{ fontSize: 12, color: '#c00' }}>{npc.error}</span>
+                      <div style={spinner} />
+                      <span style={{ fontSize: 12, color: '#888', marginTop: 8 }}>生成中 0/4...</span>
                     </div>
                   ) : (
                     <div style={centerFlex}>
@@ -232,18 +247,22 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* 信息区域 */}
                 <div style={{ padding: '10px 12px' }}>
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{npc.name}</div>
                   <div style={{ fontSize: 12, color: '#666', lineHeight: 1.5, marginBottom: 6 }}>{npc.description}</div>
                   <div style={{ fontSize: 11, color: '#999', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{npc.image_prompt}</div>
-                  {npc.images.length > 0 && (
+                  {npc.images.length > 0 && !npc.loading && (
                     <button
                       onClick={e => { e.stopPropagation(); generateForNPC(idx) }}
                       style={{ ...btnSmall, marginTop: 8, fontSize: 11 }}
                     >
                       重新生成
                     </button>
+                  )}
+                  {npc.loading && (
+                    <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
+                      已生成 {npc.images.length}/4 张...
+                    </div>
                   )}
                 </div>
               </div>
@@ -256,60 +275,20 @@ export default function Home() {
 }
 
 const selectStyle: React.CSSProperties = {
-  fontSize: 13,
-  padding: '5px 8px',
-  borderRadius: 6,
-  border: '1px solid #ddd',
-  background: '#fff',
-  cursor: 'pointer',
+  fontSize: 13, padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', cursor: 'pointer',
 }
-
 const btnPrimary: React.CSSProperties = {
-  padding: '8px 18px',
-  fontSize: 14,
-  fontWeight: 500,
-  borderRadius: 7,
-  border: '1px solid #1a1a1a',
-  background: '#1a1a1a',
-  color: '#fff',
-  cursor: 'pointer',
+  padding: '8px 18px', fontSize: 14, fontWeight: 500, borderRadius: 7, border: '1px solid #1a1a1a', background: '#1a1a1a', color: '#fff', cursor: 'pointer',
 }
-
 const btnSecondary: React.CSSProperties = {
-  padding: '8px 18px',
-  fontSize: 14,
-  fontWeight: 500,
-  borderRadius: 7,
-  border: '1px solid #ddd',
-  background: '#fff',
-  color: '#333',
-  cursor: 'pointer',
+  padding: '8px 18px', fontSize: 14, fontWeight: 500, borderRadius: 7, border: '1px solid #ddd', background: '#fff', color: '#333', cursor: 'pointer',
 }
-
 const btnSmall: React.CSSProperties = {
-  padding: '5px 12px',
-  fontSize: 12,
-  borderRadius: 6,
-  border: '1px solid #ddd',
-  background: '#fff',
-  color: '#333',
-  cursor: 'pointer',
+  padding: '5px 12px', fontSize: 12, borderRadius: 6, border: '1px solid #ddd', background: '#fff', color: '#333', cursor: 'pointer',
 }
-
 const centerFlex: React.CSSProperties = {
-  position: 'absolute',
-  inset: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
+  position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
 }
-
 const spinner: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  border: '2px solid #e0e0e0',
-  borderTopColor: '#333',
-  borderRadius: '50%',
-  animation: 'spin 0.8s linear infinite',
+  width: 28, height: 28, border: '2px solid #e0e0e0', borderTopColor: '#333', borderRadius: '50%', animation: 'spin 0.8s linear infinite',
 }
