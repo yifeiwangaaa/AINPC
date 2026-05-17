@@ -4,12 +4,12 @@ import OpenAI from 'openai'
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 async function generateWithGPTImage2(prompt: string, ratio: string) {
-  const sizeMap: Record<string, string> = {
+  const sizeMap: Record<string, '1024x1024' | '1536x1024' | '1024x1536'> = {
     '16:9': '1536x1024',
     '9:16': '1024x1536',
     '1:1': '1024x1024',
   }
-  const size = (sizeMap[ratio] || '1536x1024') as '1024x1024' | '1536x1024' | '1024x1536'
+  const size = sizeMap[ratio] || '1536x1024'
   const promises = Array.from({ length: 4 }, () =>
     openai.images.generate({
       model: 'gpt-image-1',
@@ -20,11 +20,13 @@ async function generateWithGPTImage2(prompt: string, ratio: string) {
     })
   )
   const results = await Promise.all(promises)
-  return results.map(r =>
-    r.data[0].b64_json
-      ? `data:image/png;base64,${r.data[0].b64_json}`
-      : r.data[0].url || ''
-  )
+  return results.map(r => {
+    const item = r.data?.[0]
+    if (!item) return ''
+    return item.b64_json
+      ? `data:image/png;base64,${item.b64_json}`
+      : item.url || ''
+  })
 }
 
 async function generateWithNanoBanana(prompt: string, ratio: string) {
