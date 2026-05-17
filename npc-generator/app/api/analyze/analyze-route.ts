@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const client = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com',
+})
 
 export async function POST(req: NextRequest) {
   const { text } = await req.json()
   if (!text) return NextResponse.json({ error: 'No text provided' }, { status: 400 })
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+  const completion = await client.chat.completions.create({
+    model: 'deepseek-chat',
     messages: [
       {
         role: 'system',

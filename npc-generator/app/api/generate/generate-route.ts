@@ -74,10 +74,10 @@ export async function POST(req: NextRequest) {
 
   try {
     let images: string[]
-    if (model === 'nano-banana-2') {
-      images = await generateWithNanoBanana(fullPrompt, aspect_ratio || '16:9')
-    } else {
+    if (model === 'gpt-image-2') {
       images = await generateWithGPTImage2(fullPrompt, aspect_ratio || '16:9')
+    } else {
+      images = await generateWithNanoBanana(fullPrompt, aspect_ratio || '16:9')
     }
     return NextResponse.json({ images })
   } catch (e) {
