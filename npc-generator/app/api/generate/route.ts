@@ -29,14 +29,20 @@ async function generateOneNanoBanana(prompt: string, ratio: string) {
     }
   )
   const data = await res.json()
+  console.log('Google API response:', JSON.stringify(data).slice(0, 500))
+  
   const parts = data?.candidates?.[0]?.content?.parts
-  if (!parts) return null
+  if (!parts) {
+    console.log('No parts found, full response:', JSON.stringify(data))
+    return null
+  }
   const part = parts.find(
     (p: { inlineData?: { mimeType: string; data: string } }) => p.inlineData
   )
   if (part?.inlineData?.data) {
     return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
   }
+  console.log('No inlineData found in parts:', JSON.stringify(parts).slice(0, 200))
   return null
 }
 
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ image })
   } catch (e) {
-    console.error(e)
+    console.error('Generate error:', e)
     return NextResponse.json({ error: '生成失败' }, { status: 500 })
   }
 }
