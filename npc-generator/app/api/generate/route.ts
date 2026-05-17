@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
+export const maxDuration = 60
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 async function generateWithGPTImage2(prompt: string, ratio: string) {
@@ -48,12 +50,15 @@ async function generateWithNanoBanana(prompt: string, ratio: string) {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             responseModalities: ['TEXT', 'IMAGE'],
+            imageGenerationConfig: { aspectRatio },
           },
         }),
       }
     )
     const data = await res.json()
-    const part = data?.candidates?.[0]?.content?.parts?.find(
+    const parts = data?.candidates?.[0]?.content?.parts
+    if (!parts) return ''
+    const part = parts.find(
       (p: { inlineData?: { mimeType: string; data: string } }) => p.inlineData
     )
     if (part?.inlineData?.data) {
@@ -62,7 +67,8 @@ async function generateWithNanoBanana(prompt: string, ratio: string) {
     return ''
   })
 
-  return Promise.all(promises)
+  const results = await Promise.all(promises)
+  return results.filter(Boolean)
 }
 
 export async function POST(req: NextRequest) {
