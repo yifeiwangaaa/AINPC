@@ -47,7 +47,7 @@ async function generateWithNanoBanana(prompt: string, ratio: string) {
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            responseModalities: ['IMAGE'],
+            responseModalities: ['TEXT', 'IMAGE'],
             imageGenerationConfig: { aspectRatio },
           },
         }),
