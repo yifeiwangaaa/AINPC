@@ -124,7 +124,7 @@ export default function Home() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = "npc_characters.xls"
+      a.download = "npc_characters.html"
       a.click()
       URL.revokeObjectURL(url)
       setNotionStatus("✓ 表格已下载")
