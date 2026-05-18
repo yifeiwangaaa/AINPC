@@ -108,6 +108,33 @@ export default function Home() {
     setNpcs(prev => prev.map(n => ({ ...n, selected: !allSelected })))
   }
 
+
+  async function exportToExcel() {
+    const selected = npcs.filter(n => n.selected && n.images.length > 0)
+    if (!selected.length) return
+    setExporting(true)
+    setNotionStatus("生成表格中...")
+    try {
+      const res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ npcs: selected }),
+      })
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "npc_characters.xls"
+      a.click()
+      URL.revokeObjectURL(url)
+      setNotionStatus("✓ 表格已下载")
+    } catch {
+      setNotionStatus("导出失败")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   async function exportToNotion() {
     const selected = npcs.filter(n => n.selected)
     if (!selected.length) return
@@ -202,6 +229,14 @@ export default function Home() {
                 placeholder="项目名称（可选）"
                 style={{ fontSize: 13, padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', width: 140 }}
               />
+              <button
+                onClick={exportToExcel}
+                disabled={selectedCount === 0 || exporting}
+                style={{ ...btnSmall, background: selectedCount > 0 ? "#1a1a1a" : "#ccc", color: "#fff", borderColor: "transparent" }}
+              >
+                {exporting ? "生成中..." : `导出 Excel (${selectedCount})`}
+              </button>
+
               <button
                 onClick={exportToNotion}
                 disabled={selectedCount === 0 || exporting}
