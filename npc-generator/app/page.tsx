@@ -12,7 +12,6 @@ type NPCWithImages = NPC & {
   images: string[]
   loading: boolean
   selected: boolean
-  error?: string
 }
 
 const MODELS = [
@@ -31,52 +30,16 @@ const STYLES = [
 
 const RATIOS = ['16:9', '1:1', '9:16']
 
-function downloadBase64Image(base64: string, filename: string) {
-  const a = document.createElement('a')
-  a.href = base64
-  a.download = filename
-  a.click()
-}
+const DATABASE_ID = '364d9d2583d58023a70edb649b030306'
 
 function downloadAllImages(npc: NPCWithImages) {
   npc.images.forEach((img, i) => {
     setTimeout(() => {
-      downloadBase64Image(img, `${npc.name}_${i + 1}.png`)
+      const a = document.createElement('a')
+      a.href = img
+      a.download = `${npc.name}_${i + 1}.png`
+      a.click()
     }, i * 300)
-  })
-}
-
-function exportToCSV(npcs: NPCWithImages[]) {
-  const selected = npcs.filter(n => n.selected && n.images.length)
-  if (!selected.length) return
-
-  const headers = ['角色名', '描述', '生图Prompt', '图像数量']
-  const rows = selected.map(n => [
-    n.name,
-    n.description,
-    n.image_prompt,
-    n.images.length.toString(),
-  ])
-
-  const csv = [headers, ...rows]
-    .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
-    .join('\n')
-
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'npc_characters.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-
-  // Also download all images
-  selected.forEach((npc, ni) => {
-    npc.images.forEach((img, ii) => {
-      setTimeout(() => {
-        downloadBase64Image(img, `${npc.name}_${ii + 1}.png`)
-      }, (ni * 4 + ii) * 300)
-    })
   })
 }
 
@@ -88,6 +51,9 @@ export default function Home() {
   const [style, setStyle] = useState('')
   const [ratio, setRatio] = useState('16:9')
   const [error, setError] = useState('')
+  const [projectName, setProjectName] = useState('')
+  const [notionStatus, setNotionStatus] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   async function analyzeText() {
     if (!text.trim()) return
@@ -112,38 +78,25 @@ export default function Home() {
 
   async function generateForNPC(idx: number) {
     const npc = npcs[idx]
-    setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: true, images: [], error: undefined } : n))
-
+    setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: true, images: [] } : n))
     for (let i = 0; i < 4; i++) {
       try {
         const res = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: npc.image_prompt,
-            negative_prompt: npc.negative_prompt,
-            model,
-            style,
-            aspect_ratio: ratio,
-          }),
+          body: JSON.stringify({ prompt: npc.image_prompt, negative_prompt: npc.negative_prompt, model, style, aspect_ratio: ratio }),
         })
         const data = await res.json()
         if (data.image) {
-          setNpcs(prev => prev.map((n, j) =>
-            j === idx ? { ...n, images: [...n.images, data.image] } : n
-          ))
+          setNpcs(prev => prev.map((n, j) => j === idx ? { ...n, images: [...n.images, data.image] } : n))
         }
-      } catch {
-        // continue
-      }
+      } catch { /* continue */ }
     }
     setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: false } : n))
   }
 
   async function generateAll() {
-    for (let i = 0; i < npcs.length; i++) {
-      await generateForNPC(i)
-    }
+    for (let i = 0; i < npcs.length; i++) await generateForNPC(i)
   }
 
   function toggleSelect(idx: number) {
@@ -153,6 +106,41 @@ export default function Home() {
   function selectAll() {
     const allSelected = npcs.every(n => n.selected)
     setNpcs(prev => prev.map(n => ({ ...n, selected: !allSelected })))
+  }
+
+  async function exportToNotion() {
+    const selected = npcs.filter(n => n.selected)
+    if (!selected.length) return
+    setExporting(true)
+    setNotionStatus('导入中...')
+    try {
+      const res = await fetch('/api/notion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ npcs: selected, databaseId: DATABASE_ID, projectName }),
+      })
+      const data = await res.json()
+      if (data.errors?.length) {
+        setNotionStatus(`完成，${data.results.length} 个成功，${data.errors.length} 个失败`)
+      } else {
+        setNotionStatus(`✓ 成功导入 ${data.results.length} 个角色到 Notion`)
+      }
+      // Also download images
+      selected.forEach((npc, ni) => {
+        npc.images.forEach((img, ii) => {
+          setTimeout(() => {
+            const a = document.createElement('a')
+            a.href = img
+            a.download = `${npc.name}_${ii + 1}.png`
+            a.click()
+          }, (ni * 4 + ii) * 300)
+        })
+      })
+    } catch {
+      setNotionStatus('导入失败，请检查 Notion API Key')
+    } finally {
+      setExporting(false)
+    }
   }
 
   const selectedCount = npcs.filter(n => n.selected).length
@@ -202,37 +190,41 @@ export default function Home() {
 
       {npcs.length > 0 && (
         <div style={{ marginTop: 28 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
             <span style={{ fontSize: 14, color: '#555' }}>识别到 {npcs.length} 个角色，已生成 {doneCount} 个</span>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={selectAll} style={btnSmall}>
                 {npcs.every(n => n.selected) ? '取消全选' : '全选'}
               </button>
+              <input
+                value={projectName}
+                onChange={e => setProjectName(e.target.value)}
+                placeholder="项目名称（可选）"
+                style={{ fontSize: 13, padding: '5px 8px', borderRadius: 6, border: '1px solid #ddd', width: 140 }}
+              />
               <button
-                onClick={() => exportToCSV(npcs)}
-                disabled={selectedCount === 0}
+                onClick={exportToNotion}
+                disabled={selectedCount === 0 || exporting}
                 style={{ ...btnSmall, background: selectedCount > 0 ? '#1a1a1a' : '#ccc', color: '#fff', borderColor: 'transparent' }}
               >
-                导出表格 + 图片 ({selectedCount})
+                {exporting ? '导入中...' : `导出到 Notion (${selectedCount})`}
               </button>
             </div>
           </div>
+          {notionStatus && (
+            <p style={{ fontSize: 13, color: notionStatus.includes('✓') ? '#27500A' : '#555', marginBottom: 12, background: notionStatus.includes('✓') ? '#EAF3DE' : '#f5f5f5', padding: '8px 12px', borderRadius: 6 }}>
+              {notionStatus}
+            </p>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {npcs.map((npc, idx) => (
               <div
                 key={idx}
-                style={{
-                  border: npc.selected ? '2px solid #1a1a1a' : '1px solid #e0e0e0',
-                  borderRadius: 10, overflow: 'hidden', background: '#fff', cursor: 'pointer',
-                }}
+                style={{ border: npc.selected ? '2px solid #1a1a1a' : '1px solid #e0e0e0', borderRadius: 10, overflow: 'hidden', background: '#fff', cursor: 'pointer' }}
                 onClick={() => toggleSelect(idx)}
               >
-                <div style={{
-                  background: '#f5f5f5',
-                  aspectRatio: ratio === '16:9' ? '16/9' : ratio === '9:16' ? '9/16' : '1/1',
-                  position: 'relative', overflow: 'hidden'
-                }}>
+                <div style={{ background: '#f5f5f5', aspectRatio: ratio === '16:9' ? '16/9' : ratio === '9:16' ? '9/16' : '1/1', position: 'relative', overflow: 'hidden' }}>
                   {npc.images.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100%' }}>
                       {npc.images.map((img, i) => (
@@ -251,9 +243,7 @@ export default function Home() {
                     </div>
                   ) : (
                     <div style={centerFlex}>
-                      <button onClick={e => { e.stopPropagation(); generateForNPC(idx) }} style={btnPrimary}>
-                        生成图像
-                      </button>
+                      <button onClick={e => { e.stopPropagation(); generateForNPC(idx) }} style={btnPrimary}>生成图像</button>
                     </div>
                   )}
                   {npc.selected && (
@@ -262,7 +252,6 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-
                 <div style={{ padding: '10px 12px' }}>
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{npc.name}</div>
                   <div style={{ fontSize: 12, color: '#666', lineHeight: 1.5, marginBottom: 6 }}>{npc.description}</div>
@@ -270,17 +259,11 @@ export default function Home() {
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     {npc.images.length > 0 && !npc.loading && (
                       <>
-                        <button onClick={e => { e.stopPropagation(); generateForNPC(idx) }} style={{ ...btnSmall, fontSize: 11 }}>
-                          重新生成
-                        </button>
-                        <button onClick={e => { e.stopPropagation(); downloadAllImages(npc) }} style={{ ...btnSmall, fontSize: 11 }}>
-                          下载图片
-                        </button>
+                        <button onClick={e => { e.stopPropagation(); generateForNPC(idx) }} style={{ ...btnSmall, fontSize: 11 }}>重新生成</button>
+                        <button onClick={e => { e.stopPropagation(); downloadAllImages(npc) }} style={{ ...btnSmall, fontSize: 11 }}>下载图片</button>
                       </>
                     )}
-                    {npc.loading && (
-                      <span style={{ fontSize: 12, color: '#888' }}>已生成 {npc.images.length}/4 张...</span>
-                    )}
+                    {npc.loading && <span style={{ fontSize: 12, color: '#888' }}>已生成 {npc.images.length}/4 张...</span>}
                   </div>
                 </div>
               </div>
