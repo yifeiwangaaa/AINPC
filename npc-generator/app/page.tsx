@@ -32,15 +32,29 @@ const RATIOS = ['16:9', '1:1', '9:16']
 
 const DATABASE_ID = '364d9d2583d58023a70edb649b030306'
 
-function downloadAllImages(npc: NPCWithImages) {
-  npc.images.forEach((img, i) => {
-    setTimeout(() => {
+async function downloadAllImages(npc: NPCWithImages) {
+  for (let i = 0; i < npc.images.length; i++) {
+    const img = npc.images[i]
+    try {
+      const res = await fetch(img)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${npc.name}_${i + 1}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      await new Promise(r => setTimeout(r, 400))
+    } catch {
       const a = document.createElement('a')
       a.href = img
       a.download = `${npc.name}_${i + 1}.png`
+      a.target = '_blank'
       a.click()
-    }, i * 300)
-  })
+    }
+  }
 }
 
 export default function Home() {
@@ -80,7 +94,7 @@ export default function Home() {
 
   async function generateForNPC(idx: number) {
     const npc = npcs[idx]
-    setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: true, images: [] } : n))
+    setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, loading: true } : n))
     for (let i = 0; i < 4; i++) {
       if (stopRef.current) break
       try {
@@ -113,6 +127,7 @@ export default function Home() {
     stopRef.current = true
     setGenerating(false)
     setNpcs(prev => prev.map(n => ({ ...n, loading: false })))
+    // images are preserved
   }
 
   function toggleSelect(idx: number) {
@@ -333,7 +348,7 @@ export default function Home() {
                     </div>
                   ) : (
                     <div style={centerFlex}>
-                      <button onClick={e => { e.stopPropagation(); generateForNPC(idx) }} style={btnPrimary}>生成图像</button>
+                      <button onClick={e => { e.stopPropagation(); setNpcs(prev => prev.map((n, i) => i === idx ? { ...n, images: [] } : n)); generateForNPC(idx) }} style={btnPrimary}>生成图像</button>
                     </div>
                   )}
                   {npc.selected && (
