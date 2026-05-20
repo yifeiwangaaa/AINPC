@@ -6,21 +6,16 @@ export const maxDuration = 30
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
-async function uploadToBlob(base64: string, filename: string): Promise<string | null> {
-  try {
-    const matches = base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
-    if (!matches) return null
-    const mimeType = matches[1]
-    const buffer = Buffer.from(matches[2], 'base64')
-    const blob = await put(filename, buffer, {
-      access: 'public',
-      contentType: mimeType,
-    })
-    return blob.url
-  } catch (e) {
-    console.error('Blob upload failed:', e)
-    return null
-  }
+async function uploadToBlob(base64: string, filename: string): Promise<string> {
+  const matches = base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
+  if (!matches) throw new Error('Invalid base64')
+  const mimeType = matches[1]
+  const buffer = Buffer.from(matches[2], 'base64')
+  const blob = await put(filename, buffer, {
+    access: 'public',
+    contentType: mimeType,
+  })
+  return blob.url
 }
 
 async function generateOneNanoBanana(prompt: string): Promise<string | null> {
@@ -37,7 +32,6 @@ async function generateOneNanoBanana(prompt: string): Promise<string | null> {
     }
   )
   const data = await res.json()
-  console.log('Google status:', res.status, 'response preview:', JSON.stringify(data).slice(0, 200))
   const parts = data?.candidates?.[0]?.content?.parts
   if (!parts) return null
   const part = parts.find((p: { inlineData?: { mimeType: string; data: string } }) => p.inlineData)
@@ -51,7 +45,6 @@ async function generateWithRetry(prompt: string, maxRetries = 3): Promise<string
   for (let i = 0; i < maxRetries; i++) {
     const result = await generateOneNanoBanana(prompt)
     if (result) return result
-    console.log(`Attempt ${i + 1} failed, retrying...`)
   }
   return null
 }
@@ -83,12 +76,11 @@ export async function POST(req: NextRequest) {
 
     if (!base64) return NextResponse.json({ image: null })
 
-    // Try to upload to Blob, fall back to base64 if it fails
-    const filename = `npc/${Date.now()}_${(npcName || 'npc').replace(/[^a-zA-Z0-9]/g, '_')}_${imageIndex || 0}.png`
-    const blobUrl = await uploadToBlob(base64, filename)
-    
-    // Return blob URL if available, otherwise return base64
-    return NextResponse.json({ image: blobUrl || base64 })
+    // Upload to Vercel Blob
+    const filename = `npc/${Date.now()}_${(npcName || 'npc').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}_${imageIndex || 0}.png`
+    const url = await uploadToBlob(base64, filename)
+
+    return NextResponse.json({ image: url })
   } catch (e) {
     console.error('Generate error:', e)
     return NextResponse.json({ error: '生成失败' }, { status: 500 })
