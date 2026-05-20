@@ -294,7 +294,7 @@ export default function Home() {
                 disabled={selectedCount === 0}
                 style={{ ...btnSmall, background: selectedCount > 0 ? "#1a1a1a" : "#ccc", color: "#fff", borderColor: "transparent" }}
               >
-                `导出 HTML (${selectedCount})`
+                导出 HTML ({selectedCount})
               </button>
 
               <button
