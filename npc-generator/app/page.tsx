@@ -109,30 +109,67 @@ export default function Home() {
   }
 
 
-  async function exportToExcel() {
+  function exportToExcel() {
     const selected = npcs.filter(n => n.selected && n.images.length > 0)
     if (!selected.length) return
-    setExporting(true)
-    setNotionStatus("生成表格中...")
-    try {
-      const res = await fetch("/api/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ npcs: selected }),
-      })
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = "npc_characters.html"
-      a.click()
-      URL.revokeObjectURL(url)
-      setNotionStatus("✓ 表格已下载")
-    } catch {
-      setNotionStatus("导出失败")
-    } finally {
-      setExporting(false)
-    }
+
+    const rows = selected.map((npc: NPCWithImages) => {
+      const imgCells = Array.from({ length: 4 }, (_, i) => {
+        const img = npc.images?.[i]
+        return img
+          ? `<td class="img-cell"><img src="${img}" /></td>`
+          : `<td class="img-cell empty">未生成</td>`
+      }).join("")
+      return `<tr>
+        <td class="name-cell">${npc.name}</td>
+        <td class="desc-cell">${npc.description || ""}<br/><span class="prompt">${npc.image_prompt || ""}</span></td>
+        ${imgCells}
+      </tr>`
+    }).join("")
+
+    const html = `<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>NPC 角色表</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f9f9f7; padding: 32px; color: #1a1a1a; }
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .meta { font-size: 13px; color: #888; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    thead { background: #f0efeb; }
+    th { padding: 12px 14px; text-align: left; font-size: 12px; font-weight: 500; color: #555; border-bottom: 1px solid #e8e6e0; }
+    td { padding: 12px 14px; border-bottom: 1px solid #f0efeb; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .name-cell { font-weight: 600; font-size: 14px; min-width: 80px; white-space: nowrap; }
+    .desc-cell { font-size: 12px; line-height: 1.6; color: #444; max-width: 200px; }
+    .prompt { color: #999; font-style: italic; margin-top: 4px; display: block; }
+    .img-cell { padding: 8px; min-width: 160px; }
+    .img-cell img { width: 160px; height: 90px; object-fit: cover; border-radius: 6px; display: block; }
+    .img-cell.empty { color: #ccc; font-size: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>NPC 角色表</h1>
+  <p class="meta">共 ${selected.length} 个角色 · 生成于 ${new Date().toLocaleDateString("zh-CN")}</p>
+  <table>
+    <thead>
+      <tr><th>角色名</th><th>描述</th><th>图像 1</th><th>图像 2</th><th>图像 3</th><th>图像 4</th></tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`
+
+    const blob = new Blob([html], { type: "text/html;charset=UTF-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "npc_characters.html"
+    a.click()
+    URL.revokeObjectURL(url)
+    setNotionStatus("✓ 表格已下载，用浏览器打开查看")
   }
 
   async function exportToNotion() {
@@ -234,7 +271,7 @@ export default function Home() {
                 disabled={selectedCount === 0 || exporting}
                 style={{ ...btnSmall, background: selectedCount > 0 ? "#1a1a1a" : "#ccc", color: "#fff", borderColor: "transparent" }}
               >
-                {exporting ? "生成中..." : `导出 Excel (${selectedCount})`}
+                {exporting ? "生成中..." : `导出 HTML (${selectedCount})`}
               </button>
 
               <button
